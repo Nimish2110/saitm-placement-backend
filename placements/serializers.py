@@ -1,15 +1,36 @@
 from rest_framework import serializers
-from .models import Drive, Application, ResumeSampleTemplate
+from .models import Drive, Application, ResumeSampleTemplate, DriveJDFile
+
+
+class DriveJDFileSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DriveJDFile
+        fields = ["id", "file", "original_filename", "uploaded_at"]
+        read_only_fields = ["id", "original_filename", "uploaded_at"]
+
+    def validate_file(self, value):
+        max_size = 10 * 1024 * 1024
+        if value.size > max_size:
+            raise serializers.ValidationError("Each file must be under 10 MB.")
+        allowed_types = [
+            "application/pdf",
+            "application/msword",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        ]
+        if value.content_type not in allowed_types:
+            raise serializers.ValidationError("Only PDF or Word documents are allowed.")
+        return value
 
 
 class DriveSerializer(serializers.ModelSerializer):
     posted_by_name = serializers.CharField(source="posted_by.get_full_name", read_only=True, default="Placement Manager")
     is_eligible = serializers.SerializerMethodField()
+    jd_files = DriveJDFileSerializer(many=True, read_only=True)
 
     class Meta:
         model = Drive
         fields = [
-            "id", "drive_type", "company_name", "company_website", "jd_text",
+            "id", "drive_type", "company_name", "company_website", "jd_text", "jd_files",
             "profiles_offered", "job_location", "eligible_courses", "eligible_batches",
             "ctc", "process_details", "last_date_of_application",
             "company_link", "pm_note",

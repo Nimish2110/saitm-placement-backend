@@ -76,6 +76,18 @@ class Application(models.Model):
     def __str__(self):
         return f"{self.student} -> {self.drive}"
 
+class DriveJDFile(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    drive = models.ForeignKey(Drive, on_delete=models.CASCADE, related_name="jd_files")
+    file = models.FileField(upload_to="drive_jd_files/%Y/%m/")
+    original_filename = models.CharField(max_length=255, blank=True)
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-uploaded_at"]
+
+    def __str__(self):
+        return f"{self.drive.company_name} — {self.original_filename}"
 
 class ResumeSampleTemplate(models.Model):
     """
