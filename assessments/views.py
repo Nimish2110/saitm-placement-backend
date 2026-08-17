@@ -206,3 +206,14 @@ class LeaderboardView(APIView):
             my_entry = {"rank": my_rank, **my_totals}
 
         return Response({"leaderboard": results, "me": my_entry})
+
+class UnattemptedCountView(APIView):
+    """GET /api/assessments/unattempted-count/ — active assessments this student hasn't submitted yet. Powers the sidebar badge."""
+    permission_classes = [IsAuthenticated, IsStudent]
+
+    def get(self, request):
+        attempted_ids = AssessmentAttempt.objects.filter(
+            student=request.user, submitted_at__isnull=False
+        ).values_list("assessment_id", flat=True)
+        count = Assessment.objects.filter(is_active=True).exclude(id__in=attempted_ids).count()
+        return Response({"count": count})
