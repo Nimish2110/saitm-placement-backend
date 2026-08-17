@@ -109,19 +109,26 @@ class SendInvitesView(APIView):
     """
     POST /api/students/admin/send-invites/
     Emails every student who hasn't completed registration yet a unique
-    invite link to their college email.
+    invite link to their college email. Reuses a single SMTP connection
+    for the whole batch instead of opening a new one per student — much
+    faster, avoids timing out when inviting many students at once.
     """
     permission_classes = [IsAuthenticated, IsAdmin]
 
     def post(self, request):
+        from django.core.mail import get_connection, EmailMessage
+
         pending = StudentProfile.objects.filter(registration_completed=False)
         sent = 0
+        connection = get_connection(fail_silently=True)
+        connection.open()
+
         for profile in pending:
             link = f"{settings.FRONTEND_URL}/complete-registration/{profile.invite_token}"
             try:
-                send_mail(
+                email = EmailMessage(
                     subject="Welcome to the SAITM Placement Portal — Complete Your Registration",
-                    message=(
+                    body=(
                         f"Hi {profile.full_name},\n\n"
                         f"You have successfully registered for the SAITM Placement Portal.\n\n"
                         f"Click the link below to set your password and complete your profile:\n{link}\n\n"
@@ -129,17 +136,18 @@ class SendInvitesView(APIView):
                         f"— SAITM T&P Cell"
                     ),
                     from_email=None,
-                    recipient_list=[profile.college_email],
-                    fail_silently=True,
+                    to=[profile.college_email],
+                    connection=connection,
                 )
+                email.send(fail_silently=True)
                 profile.invite_sent_at = timezone.now()
                 profile.save()
                 sent += 1
             except Exception:
                 continue
 
+        connection.close()
         return Response({"sent": sent, "detail": f"Invite link sent to {sent} student(s)."})
-
 
 class InviteDetailView(APIView):
     """GET /api/students/invite/<token>/ — public. Shows the pre-filled data before the student fills in the rest."""
