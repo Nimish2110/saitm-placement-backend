@@ -40,10 +40,22 @@ class DriveListCreateView(generics.ListCreateAPIView):
         )
 
     def perform_create(self, serializer):
+        from django.utils import timezone
+        from datetime import timedelta
+
+        recent_duplicate = Drive.objects.filter(
+            posted_by=self.request.user,
+            company_name=serializer.validated_data.get("company_name"),
+            posted_on__gte=timezone.now() - timedelta(seconds=30),
+        ).first()
+        if recent_duplicate:
+            serializer.instance = recent_duplicate
+            return
+
         drive = serializer.save(posted_by=self.request.user)
         import threading
         threading.Thread(target=self._notify_eligible_students, args=(drive,), daemon=True).start()
-
+        
     def _notify_eligible_students(self, drive):
         eligible_students = StudentProfile.objects.filter(
             course__in=drive.eligible_courses,
