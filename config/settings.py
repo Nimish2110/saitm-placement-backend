@@ -28,9 +28,11 @@ INSTALLED_APPS = [
     "placements",
     "assessments",
     "announcements",
+    "storages",
 ]
 
 MIDDLEWARE = [
+    "config.debug_middleware.ShowErrorMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
@@ -136,3 +138,23 @@ EMAIL_USE_TLS = True
 EMAIL_HOST_USER = config("EMAIL_HOST_USER", default="")
 EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD", default="")
 DEFAULT_FROM_EMAIL = config("DEFAULT_FROM_EMAIL", default=EMAIL_HOST_USER)
+
+# ---- Supabase Storage (S3-compatible object storage) ----
+STORAGES = {
+    "default": {
+        "BACKEND": "storages.backends.s3boto3.S3Boto3Storage",
+    },
+    "staticfiles": {
+        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+    },
+}
+
+AWS_ACCESS_KEY_ID = config("SUPABASE_S3_ACCESS_KEY_ID")
+AWS_SECRET_ACCESS_KEY = config("SUPABASE_S3_SECRET_ACCESS_KEY")
+AWS_STORAGE_BUCKET_NAME = config("SUPABASE_S3_BUCKET_NAME", default="media")
+AWS_S3_ENDPOINT_URL = config("SUPABASE_S3_ENDPOINT_URL")
+AWS_S3_REGION_NAME = config("SUPABASE_S3_REGION", default="ap-southeast-2")
+AWS_S3_ADDRESSING_STYLE = "path"
+AWS_DEFAULT_ACL = None
+AWS_QUERYSTRING_AUTH = False
+AWS_S3_FILE_OVERWRITE = False
