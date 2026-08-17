@@ -129,11 +129,14 @@ FRONTEND_URL = config("FRONTEND_URL", default="http://localhost:3000")
 # EMAIL_HOST_PASSWORD must be a Gmail "App Password", not your normal Gmail
 # password (Google blocks normal-password SMTP login). Generate one at:
 # https://myaccount.google.com/apppasswords (requires 2-Step Verification on).
+# EMAIL_TIMEOUT stops Django from hanging forever (and risking crashing the
+# whole server) if Gmail's servers don't respond within 10 seconds.
 # ---------------------------------------------------------------------------
 EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 EMAIL_HOST = "smtp.gmail.com"
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
+EMAIL_TIMEOUT = 10
 EMAIL_HOST_USER = config("EMAIL_HOST_USER", default="")
 EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD", default="")
 DEFAULT_FROM_EMAIL = config("DEFAULT_FROM_EMAIL", default=EMAIL_HOST_USER)

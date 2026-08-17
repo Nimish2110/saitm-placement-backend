@@ -54,6 +54,10 @@ class DriveListCreateView(generics.ListCreateAPIView):
         batches_str = "/".join(drive.eligible_batches)
         subject = f"Placement Opportunity | {drive.company_name} {drive.drive_type} | {courses_str} {batches_str} Batch | {drive.ctc}"
 
+        from django.core.mail import get_connection
+        connection = get_connection(fail_silently=True)
+        connection.open()
+
         for profile in eligible_students:
             if not profile.user or not profile.user.email:
                 continue
@@ -83,6 +87,7 @@ class DriveListCreateView(generics.ListCreateAPIView):
                 lines += ["", "Job Description: available on the portal — open this drive and click \"Open JD\"."]
 
             lines += ["", f"Apply directly here: {settings.FRONTEND_URL}/jobs-placements"]
+
             if drive.company_link:
                 lines += [
                     "",
@@ -102,10 +107,12 @@ class DriveListCreateView(generics.ListCreateAPIView):
                     from_email=None,
                     recipient_list=[profile.user.email],
                     fail_silently=True,
+                    connection=connection,
                 )
             except Exception:
                 continue
 
+        connection.close()
 
 class MyDrivesView(generics.ListAPIView):
     """Drives Floated — only drives posted by the logged-in PM."""
