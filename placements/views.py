@@ -6,7 +6,7 @@ from rest_framework.views import APIView
 from rest_framework import status
 from django.utils import timezone
 from django.core.mail import send_mail
-
+from django.conf import settings
 from users.permissions import IsStudent, IsPlacementManager
 from students.models import StudentProfile, StudentDocument
 from students.views import MAX_DOCS_BY_TYPE, DEFAULT_MAX_DOCS
@@ -41,7 +41,8 @@ class DriveListCreateView(generics.ListCreateAPIView):
 
     def perform_create(self, serializer):
         drive = serializer.save(posted_by=self.request.user)
-        self._notify_eligible_students(drive)
+        import threading
+        threading.Thread(target=self._notify_eligible_students, args=(drive,), daemon=True).start()
 
     def _notify_eligible_students(self, drive):
         eligible_students = StudentProfile.objects.filter(
@@ -81,8 +82,7 @@ class DriveListCreateView(generics.ListCreateAPIView):
             if drive.jd_text:
                 lines += ["", "Job Description: available on the portal — open this drive and click \"Open JD\"."]
 
-            lines += ["", "Apply directly on the SAITM Placement Portal — log in and go to Jobs & Placements."]
-
+            lines += ["", f"Apply directly here: {settings.FRONTEND_URL}/jobs-placements"]
             if drive.company_link:
                 lines += [
                     "",
