@@ -10,4 +10,5 @@ urlpatterns = [
     path("attempts/<uuid:attempt_id>/submit/", views.SubmitAttemptView.as_view(), name="attempt-submit"),
     path("<uuid:pk>/", views.AssessmentDetailView.as_view(), name="assessment-detail"),
     path("<uuid:pk>/start/", views.StartAttemptView.as_view(), name="assessment-start"),
+    path("unattempted-count/", views.UnattemptedCountView.as_view(), name="unattempted-count"),
 ]
