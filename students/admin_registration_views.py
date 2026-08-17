@@ -108,47 +108,52 @@ class BulkImportStudentsView(APIView):
 class SendInvitesView(APIView):
     """
     POST /api/students/admin/send-invites/
-    Emails every student who hasn't completed registration yet a unique
-    invite link to their college email. Reuses a single SMTP connection
-    for the whole batch instead of opening a new one per student — much
-    faster, avoids timing out when inviting many students at once.
+    Kicks off sending in a background thread and returns immediately —
+    doesn't make the Admin's browser wait for every email to finish, which
+    was timing out Render's request limit once there were enough students.
     """
     permission_classes = [IsAuthenticated, IsAdmin]
 
     def post(self, request):
+        import threading
         from django.core.mail import get_connection, EmailMessage
 
-        pending = StudentProfile.objects.filter(registration_completed=False)
-        sent = 0
-        connection = get_connection(fail_silently=True)
-        connection.open()
+        pending_ids = list(StudentProfile.objects.filter(registration_completed=False).values_list("id", flat=True))
+        frontend_url = settings.FRONTEND_URL
 
-        for profile in pending:
-            link = f"{settings.FRONTEND_URL}/complete-registration/{profile.invite_token}"
-            try:
-                email = EmailMessage(
-                    subject="Welcome to the SAITM Placement Portal — Complete Your Registration",
-                    body=(
-                        f"Hi {profile.full_name},\n\n"
-                        f"You have successfully registered for the SAITM Placement Portal.\n\n"
-                        f"Click the link below to set your password and complete your profile:\n{link}\n\n"
-                        f"This link is unique to you — please don't share it.\n\n"
-                        f"— SAITM T&P Cell"
-                    ),
-                    from_email=None,
-                    to=[profile.college_email],
-                    connection=connection,
-                )
-                email.send(fail_silently=True)
-                profile.invite_sent_at = timezone.now()
-                profile.save()
-                sent += 1
-            except Exception:
-                continue
+        def send_all():
+            connection = get_connection(fail_silently=True)
+            connection.open()
+            for profile_id in pending_ids:
+                try:
+                    profile = StudentProfile.objects.get(id=profile_id)
+                    link = f"{frontend_url}/complete-registration/{profile.invite_token}"
+                    email = EmailMessage(
+                        subject="Welcome to the SAITM Placement Portal — Complete Your Registration",
+                        body=(
+                            f"Hi {profile.full_name},\n\n"
+                            f"You have successfully registered for the SAITM Placement Portal.\n\n"
+                            f"Click the link below to set your password and complete your profile:\n{link}\n\n"
+                            f"This link is unique to you — please don't share it.\n\n"
+                            f"— SAITM T&P Cell"
+                        ),
+                        from_email=None,
+                        to=[profile.college_email],
+                        connection=connection,
+                    )
+                    email.send(fail_silently=True)
+                    profile.invite_sent_at = timezone.now()
+                    profile.save()
+                except Exception:
+                    continue
+            connection.close()
 
-        connection.close()
-        return Response({"sent": sent, "detail": f"Invite link sent to {sent} student(s)."})
+        threading.Thread(target=send_all, daemon=True).start()
 
+        return Response({
+            "sent": len(pending_ids),
+            "detail": f"Sending invite links to {len(pending_ids)} student(s) — this may take a minute, check their inboxes shortly.",
+        })
 class InviteDetailView(APIView):
     """GET /api/students/invite/<token>/ — public. Shows the pre-filled data before the student fills in the rest."""
     permission_classes = [AllowAny]
