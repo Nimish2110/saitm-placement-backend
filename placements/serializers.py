@@ -47,8 +47,10 @@ class DriveSerializer(serializers.ModelSerializer):
         if not profile:
             return False
         return profile.course in obj.eligible_courses and profile.batch in obj.eligible_batches
-        def get_applications_count(self, obj):
-            return obj.applications.count()
+
+    def get_applications_count(self, obj):
+        return obj.applications.count()
+        
 
 
 class ApplicationSerializer(serializers.ModelSerializer):
