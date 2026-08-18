@@ -160,3 +160,4 @@ AWS_S3_ADDRESSING_STYLE = "path"
 AWS_DEFAULT_ACL = None
 AWS_QUERYSTRING_AUTH = False
 AWS_S3_FILE_OVERWRITE = False
+AWS_S3_CUSTOM_DOMAIN = "eakqyqvgtuiskgulflql.supabase.co/storage/v1/object/public/media"
