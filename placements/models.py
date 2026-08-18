@@ -7,7 +7,10 @@ class Drive(models.Model):
     class Status(models.TextChoices):
         OPEN = "open", "Open"
         CLOSED = "closed", "Closed"
-
+    class ApprovalStatus(models.TextChoices):
+        PENDING = "pending", "Pending Approval"
+        APPROVED = "approved", "Approved"
+        REJECTED = "rejected", "Rejected"
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
     drive_type = models.CharField(
@@ -25,6 +28,9 @@ class Drive(models.Model):
     ctc = models.CharField(max_length=100)
     process_details = models.CharField(max_length=255, blank=True)
     last_date_of_application = models.DateTimeField()
+    approval_status = models.CharField(max_length=10, choices=ApprovalStatus.choices, default=ApprovalStatus.PENDING)
+    approved_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="drives_approved")
+    approved_on = models.DateTimeField(null=True, blank=True)
 
     # The ONLY link field now — students apply through our own in-app form
     # (see Application below). This is just for the (optional) companies that

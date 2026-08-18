@@ -5,6 +5,11 @@ from . import jd_views
 urlpatterns = [
     path("drives/", views.DriveListCreateView.as_view(), name="drive-list-create"),
     path("drives/mine/", views.MyDrivesView.as_view(), name="drives-floated"),
+    path("drives/admin/pending/", views.AdminPendingDrivesView.as_view(), name="admin-pending-drives"),
+    path("drives/admin/published/", views.AdminPublishedDrivesView.as_view(), name="admin-published-drives"),
+    path("drives/admin/<uuid:pk>/", views.AdminDriveDetailView.as_view(), name="admin-drive-detail"),
+    path("drives/admin/<uuid:pk>/approve/", views.AdminApproveDriveView.as_view(), name="admin-approve-drive"),
+    path("drives/admin/<uuid:pk>/reject/", views.AdminRejectDriveView.as_view(), name="admin-reject-drive"),
     path("drives/<uuid:pk>/apply/", views.ApplyToDriveView.as_view(), name="drive-apply"),
     path("applications/export/", views.ExportApplicationsView.as_view(), name="applications-export"),
     path("applications/", views.ApplicationListView.as_view(), name="applications-list"),

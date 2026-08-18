@@ -7,19 +7,93 @@ from rest_framework import status
 from django.utils import timezone
 from django.core.mail import send_mail
 from django.conf import settings
-from users.permissions import IsStudent, IsPlacementManager
+from users.permissions import IsStudent, IsPlacementManager, IsAdmin
 from students.models import StudentProfile, StudentDocument
 from students.views import MAX_DOCS_BY_TYPE, DEFAULT_MAX_DOCS
 from .models import Drive, Application, ResumeSampleTemplate
 from .serializers import DriveSerializer, ApplicationSerializer, ApplicationFormSerializer, ResumeSampleTemplateSerializer
 
 
+def notify_eligible_students(drive):
+    """
+    Emails every student whose course+batch match this drive.
+    Now called from Admin's approve action — NOT at drive creation anymore.
+    """
+    eligible_students = StudentProfile.objects.filter(
+        course__in=drive.eligible_courses,
+        batch__in=drive.eligible_batches,
+    ).select_related("user")
+
+    courses_str = "/".join(c.replace("B.Tech - ", "") for c in drive.eligible_courses)
+    batches_str = "/".join(drive.eligible_batches)
+    subject = f"Placement Opportunity | {drive.company_name} {drive.drive_type} | {courses_str} {batches_str} Batch | {drive.ctc}"
+
+    from django.core.mail import get_connection
+    connection = get_connection(fail_silently=True)
+    connection.open()
+
+    for profile in eligible_students:
+        if not profile.user or not profile.user.email:
+            continue
+
+        lines = [
+            "Dear Student,",
+            "",
+            "Greetings from the Training & Placement Cell!",
+            "",
+            f"We are pleased to inform you about an exciting {drive.drive_type} Opportunity with {drive.company_name}"
+            f" for the {batches_str} Batch.",
+            "",
+            "Drive Details:",
+            f"Company Name: {drive.company_name}",
+            f"Drive Type: {drive.drive_type}",
+            f"Profile Offered: {', '.join(drive.profiles_offered)}",
+            f"Salary Package: {drive.ctc}",
+            f"Job Location: {drive.job_location}",
+            f"Eligible Courses: {', '.join(drive.eligible_courses)}",
+            f"Eligible Batch: {batches_str}",
+            f"Last Date to Apply: {drive.last_date_of_application.strftime('%d %B %Y')}",
+        ]
+
+        if drive.company_website:
+            lines += ["", "Company Website:", drive.company_website]
+        if drive.jd_text:
+            lines += ["", "Job Description: available on the portal — open this drive and click \"Open JD\"."]
+
+        lines += ["", f"Apply directly here: {settings.FRONTEND_URL}/jobs-placements"]
+
+        if drive.company_link:
+            lines += [
+                "",
+                f"Important: This company also requires registration on their own portal: {drive.company_link}",
+                "Please complete both the in-portal application and the company's own registration.",
+            ]
+
+        if drive.pm_note:
+            lines += ["", f"Note: {drive.pm_note}"]
+
+        lines += ["", "All the best!", "— Placement Manager, T&P Cell, SAITM"]
+
+        try:
+            send_mail(
+                subject=subject,
+                message="\n".join(lines),
+                from_email=None,
+                recipient_list=[profile.user.email],
+                fail_silently=True,
+                connection=connection,
+            )
+        except Exception:
+            continue
+
+    connection.close()
+
+
 class DriveListCreateView(generics.ListCreateAPIView):
     """
-    GET  -> students only see OPEN drives matching their own course AND batch.
-            Placement Managers (or any non-student) see all open drives.
-    POST -> Placement Manager only. Publishing a drive — triggers email
-            notifications to every eligible student.
+    GET  -> students only see APPROVED, open, not-yet-expired drives.
+    POST -> Placement Manager only. Creates the drive as PENDING — nothing
+            is published or notified until an Admin explicitly approves it.
     """
     serializer_class = DriveSerializer
 
@@ -29,18 +103,13 @@ class DriveListCreateView(generics.ListCreateAPIView):
         return [IsAuthenticated()]
 
     def get_queryset(self):
-        # Everyone (student or PM) sees the same open, not-yet-expired drives.
-        # Eligibility is now surfaced as a per-drive flag (is_eligible) instead
-        # of hiding drives outright — so students can see a company is visiting
-        # even for other branches/batches, with Apply disabled if they don't match.
-        # A drive drops off this list on its own the moment its deadline passes.
         return Drive.objects.filter(
+            approval_status=Drive.ApprovalStatus.APPROVED,
             status=Drive.Status.OPEN,
             last_date_of_application__gte=timezone.now(),
         )
 
     def perform_create(self, serializer):
-        from django.utils import timezone
         from datetime import timedelta
 
         recent_duplicate = Drive.objects.filter(
@@ -52,80 +121,7 @@ class DriveListCreateView(generics.ListCreateAPIView):
             serializer.instance = recent_duplicate
             return
 
-        drive = serializer.save(posted_by=self.request.user)
-        import threading
-        threading.Thread(target=self._notify_eligible_students, args=(drive,), daemon=True).start()
-        
-    def _notify_eligible_students(self, drive):
-        eligible_students = StudentProfile.objects.filter(
-            course__in=drive.eligible_courses,
-            batch__in=drive.eligible_batches,
-        ).select_related("user")
-
-        courses_str = "/".join(c.replace("B.Tech - ", "") for c in drive.eligible_courses)
-        batches_str = "/".join(drive.eligible_batches)
-        subject = f"Placement Opportunity | {drive.company_name} {drive.drive_type} | {courses_str} {batches_str} Batch | {drive.ctc}"
-
-        from django.core.mail import get_connection
-        connection = get_connection(fail_silently=True)
-        connection.open()
-
-        for profile in eligible_students:
-            if not profile.user or not profile.user.email:
-                continue
-
-            lines = [
-                "Dear Student,",
-                "",
-                "Greetings from the Training & Placement Cell!",
-                "",
-                f"We are pleased to inform you about an exciting {drive.drive_type} Opportunity with {drive.company_name}"
-                f" for the {batches_str} Batch.",
-                "",
-                "Drive Details:",
-                f"Company Name: {drive.company_name}",
-                f"Drive Type: {drive.drive_type}",
-                f"Profile Offered: {', '.join(drive.profiles_offered)}",
-                f"Salary Package: {drive.ctc}",
-                f"Job Location: {drive.job_location}",
-                f"Eligible Courses: {', '.join(drive.eligible_courses)}",
-                f"Eligible Batch: {batches_str}",
-                f"Last Date to Apply: {drive.last_date_of_application.strftime('%d %B %Y')}",
-            ]
-
-            if drive.company_website:
-                lines += ["", "Company Website:", drive.company_website]
-            if drive.jd_text:
-                lines += ["", "Job Description: available on the portal — open this drive and click \"Open JD\"."]
-
-            lines += ["", f"Apply directly here: {settings.FRONTEND_URL}/jobs-placements"]
-
-            if drive.company_link:
-                lines += [
-                    "",
-                    f"Important: This company also requires registration on their own portal: {drive.company_link}",
-                    "Please complete both the in-portal application and the company's own registration.",
-                ]
-
-            if drive.pm_note:
-                lines += ["", f"Note: {drive.pm_note}"]
-
-            lines += ["", "All the best!", "— Placement Manager, T&P Cell, SAITM"]
-
-            try:
-                send_mail(
-                    subject=subject,
-                    message="\n".join(lines),
-                    from_email=None,
-                    recipient_list=[profile.user.email],
-                    fail_silently=True,
-                    connection=connection,
-                )
-            except Exception:
-                continue
-
-        connection.close()
-
+        serializer.save(posted_by=self.request.user, approval_status=Drive.ApprovalStatus.PENDING)
 class MyDrivesView(generics.ListAPIView):
     """Drives Floated — only drives posted by the logged-in PM."""
     serializer_class = DriveSerializer
@@ -409,3 +405,70 @@ class ResumeSampleTemplateDeleteView(APIView):
             return Response({"detail": "You can only remove formats you uploaded."}, status=status.HTTP_403_FORBIDDEN)
         template.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+class AdminPendingDrivesView(generics.ListAPIView):
+    """GET /api/drives/admin/pending/ — Admin only. Everything awaiting review."""
+    serializer_class = DriveSerializer
+    permission_classes = [IsAuthenticated, IsAdmin]
+
+    def get_queryset(self):
+        return Drive.objects.filter(approval_status=Drive.ApprovalStatus.PENDING)
+
+
+class AdminPublishedDrivesView(generics.ListAPIView):
+    """GET /api/drives/admin/published/ — Admin only. Every drive that's actually live, with full data."""
+    serializer_class = DriveSerializer
+    permission_classes = [IsAuthenticated, IsAdmin]
+
+    def get_queryset(self):
+        return Drive.objects.filter(approval_status=Drive.ApprovalStatus.APPROVED)
+
+
+class AdminDriveDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """GET/PATCH/DELETE /api/drives/admin/<id>/ — Admin only. View, edit, or permanently delete any drive."""
+    serializer_class = DriveSerializer
+    permission_classes = [IsAuthenticated, IsAdmin]
+    queryset = Drive.objects.all()
+
+    def perform_destroy(self, instance):
+        # Clean up the actual uploaded JD files from object storage too,
+        # not just their database rows — same care as student/PM deletion.
+        for jd_file in instance.jd_files.all():
+            if jd_file.file:
+                jd_file.file.delete(save=False)
+        instance.delete()
+
+class AdminApproveDriveView(APIView):
+    """POST /api/drives/admin/<id>/approve/ — Admin only. Publishes the drive and notifies eligible students."""
+    permission_classes = [IsAuthenticated, IsAdmin]
+
+    def post(self, request, pk):
+        try:
+            drive = Drive.objects.get(pk=pk)
+        except Drive.DoesNotExist:
+            return Response({"detail": "Drive not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        drive.approval_status = Drive.ApprovalStatus.APPROVED
+        drive.approved_by = request.user
+        drive.approved_on = timezone.now()
+        drive.save()
+
+        import threading
+        threading.Thread(target=notify_eligible_students, args=(drive,), daemon=True).start()
+
+        return Response(DriveSerializer(drive).data)
+
+
+class AdminRejectDriveView(APIView):
+    """POST /api/drives/admin/<id>/reject/ — Admin only."""
+    permission_classes = [IsAuthenticated, IsAdmin]
+
+    def post(self, request, pk):
+        try:
+            drive = Drive.objects.get(pk=pk)
+        except Drive.DoesNotExist:
+            return Response({"detail": "Drive not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        drive.approval_status = Drive.ApprovalStatus.REJECTED
+        drive.save()
+        return Response(DriveSerializer(drive).data)

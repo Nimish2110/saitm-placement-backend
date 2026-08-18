@@ -36,8 +36,9 @@ class DriveSerializer(serializers.ModelSerializer):
             "ctc", "process_details", "last_date_of_application",
             "company_link", "pm_note",
             "posted_by_name", "posted_on", "status", "is_eligible", "applications_count",
+            "approval_status", "approved_on"
         ]
-        read_only_fields = ["id", "posted_on", "status"]
+        read_only_fields = ["id", "posted_on", "status", "approval_status", "approved_on"]
 
     def get_is_eligible(self, obj):
         request = self.context.get("request")
@@ -50,7 +51,6 @@ class DriveSerializer(serializers.ModelSerializer):
 
     def get_applications_count(self, obj):
         return obj.applications.count()
-        
 
 
 class ApplicationSerializer(serializers.ModelSerializer):
