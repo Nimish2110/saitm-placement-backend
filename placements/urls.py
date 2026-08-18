@@ -1,6 +1,7 @@
 from django.urls import path
 from . import views
 from . import jd_views
+from . import dashboard_views
 
 urlpatterns = [
     path("drives/", views.DriveListCreateView.as_view(), name="drive-list-create"),
@@ -18,4 +19,5 @@ urlpatterns = [
     path("resume-formats/<uuid:pk>/", views.ResumeSampleTemplateDeleteView.as_view(), name="resume-format-delete"),
     path("drives/<uuid:drive_id>/jd-files/", jd_views.DriveJDFileListUploadView.as_view(), name="drive-jd-files"),
     path("drives/jd-files/<uuid:file_id>/", jd_views.DriveJDFileDeleteView.as_view(), name="drive-jd-file-delete"),
+    path("admin/dashboard/", dashboard_views.AdminDashboardView.as_view(), name="admin-dashboard"),
 ]
