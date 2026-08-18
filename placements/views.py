@@ -258,6 +258,7 @@ class ApplicationListView(generics.ListAPIView):
         batch = self.request.query_params.get("batch")
         company = self.request.query_params.get("company")
         roll_no = self.request.query_params.get("roll_no")
+        drive_id = self.request.query_params.get("drive")  # NEW
         if course:
             qs = qs.filter(student__student_profile__course=course)
         if batch:
@@ -266,6 +267,8 @@ class ApplicationListView(generics.ListAPIView):
             qs = qs.filter(drive__company_name=company)
         if roll_no:
             qs = qs.filter(student__student_profile__roll_no__icontains=roll_no)
+        if drive_id:  # NEW
+            qs = qs.filter(drive_id=drive_id)  # NEW
         return qs
 
 

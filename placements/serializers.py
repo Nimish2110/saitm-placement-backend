@@ -25,6 +25,7 @@ class DriveJDFileSerializer(serializers.ModelSerializer):
 class DriveSerializer(serializers.ModelSerializer):
     posted_by_name = serializers.CharField(source="posted_by.get_full_name", read_only=True, default="Placement Manager")
     is_eligible = serializers.SerializerMethodField()
+    applications_count = serializers.SerializerMethodField()
     jd_files = DriveJDFileSerializer(many=True, read_only=True)
 
     class Meta:
@@ -34,7 +35,7 @@ class DriveSerializer(serializers.ModelSerializer):
             "profiles_offered", "job_location", "eligible_courses", "eligible_batches",
             "ctc", "process_details", "last_date_of_application",
             "company_link", "pm_note",
-            "posted_by_name", "posted_on", "status", "is_eligible",
+            "posted_by_name", "posted_on", "status", "is_eligible", "applications_count",
         ]
         read_only_fields = ["id", "posted_on", "status"]
 
@@ -46,6 +47,8 @@ class DriveSerializer(serializers.ModelSerializer):
         if not profile:
             return False
         return profile.course in obj.eligible_courses and profile.batch in obj.eligible_batches
+        def get_applications_count(self, obj):
+            return obj.applications.count()
 
 
 class ApplicationSerializer(serializers.ModelSerializer):
