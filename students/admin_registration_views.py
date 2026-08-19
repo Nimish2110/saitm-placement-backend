@@ -108,52 +108,55 @@ class BulkImportStudentsView(APIView):
 class SendInvitesView(APIView):
     """
     POST /api/students/admin/send-invites/
-    Kicks off sending in a background thread and returns immediately —
-    doesn't make the Admin's browser wait for every email to finish, which
-    was timing out Render's request limit once there were enough students.
+    Emails every student who hasn't completed registration yet a unique
+    invite link to their college email. Sends directly within the request
+    (not a background thread — those aren't reliable in a gunicorn/WSGI app
+    and can silently die before finishing) using ONE shared SMTP connection
+    for speed. Reports back exactly how many actually succeeded.
     """
     permission_classes = [IsAuthenticated, IsAdmin]
 
     def post(self, request):
-        import threading
         from django.core.mail import get_connection, EmailMessage
 
-        pending_ids = list(StudentProfile.objects.filter(registration_completed=False).values_list("id", flat=True))
-        frontend_url = settings.FRONTEND_URL
+        pending = StudentProfile.objects.filter(registration_completed=False)
+        sent = 0
+        failed = 0
+        connection = get_connection(fail_silently=False)
+        connection.open()
 
-        def send_all():
-            connection = get_connection(fail_silently=True)
-            connection.open()
-            for profile_id in pending_ids:
-                try:
-                    profile = StudentProfile.objects.get(id=profile_id)
-                    link = f"{frontend_url}/complete-registration/{profile.invite_token}"
-                    email = EmailMessage(
-                        subject="Welcome to the SAITM Placement Portal — Complete Your Registration",
-                        body=(
-                            f"Hi {profile.full_name},\n\n"
-                            f"You have successfully registered for the SAITM Placement Portal.\n\n"
-                            f"Click the link below to set your password and complete your profile:\n{link}\n\n"
-                            f"This link is unique to you — please don't share it.\n\n"
-                            f"— SAITM T&P Cell"
-                        ),
-                        from_email=None,
-                        to=[profile.college_email],
-                        connection=connection,
-                    )
-                    email.send(fail_silently=True)
-                    profile.invite_sent_at = timezone.now()
-                    profile.save()
-                except Exception:
-                    continue
-            connection.close()
+        for profile in pending:
+            link = f"{settings.FRONTEND_URL}/complete-registration/{profile.invite_token}"
+            try:
+                email = EmailMessage(
+                    subject="Welcome to the SAITM Placement Portal — Complete Your Registration",
+                    body=(
+                        f"Hi {profile.full_name},\n\n"
+                        f"You have successfully registered for the SAITM Placement Portal.\n\n"
+                        f"Click the link below to set your password and complete your profile:\n{link}\n\n"
+                        f"This link is unique to you — please don't share it.\n\n"
+                        f"— SAITM T&P Cell"
+                    ),
+                    from_email=None,
+                    to=[profile.college_email],
+                    connection=connection,
+                )
+                email.send(fail_silently=False)
+                profile.invite_sent_at = timezone.now()
+                profile.save()
+                sent += 1
+            except Exception:
+                failed += 1
+                continue
 
-        threading.Thread(target=send_all, daemon=True).start()
+        connection.close()
 
-        return Response({
-            "sent": len(pending_ids),
-            "detail": f"Sending invite links to {len(pending_ids)} student(s) — this may take a minute, check their inboxes shortly.",
-        })
+        detail = f"Sent to {sent} of {sent + failed} student(s)."
+        if failed:
+            detail += f" {failed} failed — check they have a valid college email on file."
+
+        return Response({"sent": sent, "failed": failed, "detail": detail})
+    
 class InviteDetailView(APIView):
     """GET /api/students/invite/<token>/ — public. Shows the pre-filled data before the student fills in the rest."""
     permission_classes = [AllowAny]
