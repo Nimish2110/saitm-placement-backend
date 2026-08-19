@@ -133,7 +133,6 @@ FRONTEND_URL = config("FRONTEND_URL", default="http://localhost:3000")
 # EMAIL_TIMEOUT stops Django from hanging forever (and risking crashing the
 # whole server) if Gmail's servers don't respond within 10 seconds.
 # ---------------------------------------------------------------------------
-INSTALLED_APPS += ["anymail"]
 
 EMAIL_BACKEND = "anymail.backends.brevo.EmailBackend"
 ANYMAIL = {
