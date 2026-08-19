@@ -108,11 +108,10 @@ class BulkImportStudentsView(APIView):
 class SendInvitesView(APIView):
     """
     POST /api/students/admin/send-invites/
-    Emails every student who hasn't completed registration yet a unique
-    invite link to their college email. Sends directly within the request
-    (not a background thread — those aren't reliable in a gunicorn/WSGI app
-    and can silently die before finishing) using ONE shared SMTP connection
-    for speed. Reports back exactly how many actually succeeded.
+    Emails every student who hasn't completed registration yet. Sends
+    directly within the request (reliable, not a background thread), with
+    the SMTP connection itself wrapped safely — so a Gmail hiccup reports
+    back cleanly instead of crashing the whole request with a 500.
     """
     permission_classes = [IsAuthenticated, IsAdmin]
 
@@ -122,8 +121,15 @@ class SendInvitesView(APIView):
         pending = StudentProfile.objects.filter(registration_completed=False)
         sent = 0
         failed = 0
-        connection = get_connection(fail_silently=False)
-        connection.open()
+
+        try:
+            connection = get_connection(fail_silently=False)
+            connection.open()
+        except Exception as e:
+            return Response(
+                {"sent": 0, "failed": pending.count(), "detail": f"Could not connect to the email server: {e}"},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
 
         for profile in pending:
             link = f"{settings.FRONTEND_URL}/complete-registration/{profile.invite_token}"
@@ -156,7 +162,8 @@ class SendInvitesView(APIView):
             detail += f" {failed} failed — check they have a valid college email on file."
 
         return Response({"sent": sent, "failed": failed, "detail": detail})
-    
+
+
 class InviteDetailView(APIView):
     """GET /api/students/invite/<token>/ — public. Shows the pre-filled data before the student fills in the rest."""
     permission_classes = [AllowAny]
