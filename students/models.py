@@ -82,6 +82,8 @@ class StudentDocument(models.Model):
         AADHAR = "aadhar", "Aadhar Card"
         TENTH_MARKSHEET = "tenth_marksheet", "10th Marksheet"
         TWELFTH_MARKSHEET = "twelfth_marksheet", "12th Marksheet"
+        CERTIFICATE = "certificate", "Certificate"
+        
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     student = models.ForeignKey(StudentProfile, on_delete=models.CASCADE, related_name="documents")

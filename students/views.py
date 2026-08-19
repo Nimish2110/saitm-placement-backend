@@ -21,6 +21,7 @@ MAX_DOCS_BY_TYPE = {
     "aadhar": 1,
     "tenth_marksheet": 1,
     "twelfth_marksheet": 1,
+    "certificate": 10,
 }
 DEFAULT_MAX_DOCS = 1
 
